@@ -1,5 +1,4 @@
 import time
-import re
 import subprocess
 import os
 
@@ -48,15 +47,22 @@ def quality_label(signal):
         return "Très instable / Critique"
 
 def main():
+    # Activation du support des séquences ANSI sous Windows CMD si nécessaire
+    if os.name == 'nt':
+        os.system('')
+
     print("=== Surveillance Wi-Fi en temps réel (Ctrl+C pour quitter) ===\n")
     
     try:
         while True:
             wifi = get_wifi_info()
             
-            # Efface l'écran (Windows)
-            os.system("cls" if os.name == "nt" else "clear")
+            # Séquence ANSI pour repositionner le curseur en haut à gauche et effacer l'écran
+            # Évite d'appeler 'cls' ou 'clear' et résout l'erreur 'unknown terminal type'
+            print("\033[H\033[2J", end="")
             
+            print("=== Surveillance Wi-Fi en temps réel (Ctrl+C pour quitter) ===\n")
+
             if wifi and wifi["ssid"] != "Non connecté":
                 qualite = quality_label(wifi["signal"])
                 bars = "█" * (wifi["signal"] // 10) + "░" * (10 - (wifi["signal"] // 10))
