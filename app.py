@@ -1,72 +1,77 @@
-import requests
-import pandas as pd
 import time
+import re
+import subprocess
+import os
 
-API_KEY = "VOTRE_CLE_API"
-
-# Liste des principales capitales mondiales
-capitals = {
-    "France": "Paris",
-    "Germany": "Berlin",
-    "United Kingdom": "London",
-    "Spain": "Madrid",
-    "Italy": "Rome",
-    "USA": "Washington",
-    "Canada": "Ottawa",
-    "Brazil": "Brasilia",
-    "Argentina": "Buenos Aires",
-    "Mexico": "Mexico City",
-    "China": "Beijing",
-    "Japan": "Tokyo",
-    "India": "New Delhi",
-    "Russia": "Moscow",
-    "Australia": "Canberra",
-    "South Africa": "Pretoria",
-    "Egypt": "Cairo",
-    "Turkey": "Ankara",
-    "Saudi Arabia": "Riyadh",
-    "Indonesia": "Jakarta"
-}
-
-def get_weather(city):
-    url = (
-        f"https://api.openweathermap.org/data/2.5/weather"
-        f"?q={city}&appid={API_KEY}&units=metric&lang=fr"
-    )
-
+def get_wifi_info():
     try:
-        response = requests.get(url, timeout=10)
-        data = response.json()
+        # Exécute la commande netsh pour récupérer l'état du Wi-Fi
+        output = subprocess.check_output(
+            ["netsh", "wlan", "show", "interfaces"], 
+            encoding="cp850", 
+            errors="ignore"
+        )
+        
+        info = {}
+        for line in output.splitlines():
+            if ":" in line:
+                key, value = line.split(":", 1)
+                info[key.strip()] = value.strip()
+                
+        # Extraction des métriques clés
+        ssid = info.get("SSID", "Non connecté")
+        signal = info.get("Signal", "0%").replace("%", "")
+        rx_rate = info.get("Vitesse de réception (Mbit/s)", info.get("Receive rate (Mbps)", "N/A"))
+        tx_rate = info.get("Vitesse de transmission (Mbit/s)", info.get("Transmit rate (Mbps)", "N/A"))
+        channel = info.get("Canal", info.get("Channel", "N/A"))
+        
+        return {
+            "ssid": ssid,
+            "signal": int(signal) if signal.isdigit() else 0,
+            "rx_rate": rx_rate,
+            "tx_rate": tx_rate,
+            "channel": channel
+        }
+    except Exception:
+        return None
 
-        if response.status_code == 200:
-            return {
-                "Ville": city,
-                "Température (°C)": data["main"]["temp"],
-                "Ressenti (°C)": data["main"]["feels_like"],
-                "Humidité (%)": data["main"]["humidity"],
-                "Description": data["weather"][0]["description"],
-                "Vent (km/h)": round(data["wind"]["speed"] * 3.6, 1)
-            }
-        else:
-            return {"Ville": city, "Erreur": data.get("message", "Erreur API")}
+def quality_label(signal):
+    if signal >= 80:
+        return "Excellente"
+    elif signal >= 60:
+        return "Bonne"
+    elif signal >= 40:
+        return "Moyenne"
+    elif signal >= 20:
+        return "Faible"
+    else:
+        return "Très instable / Critique"
 
-    except Exception as e:
-        return {"Ville": city, "Erreur": str(e)}
-
-def display_weather():
-    weather_data = []
-
-    for country, capital in capitals.items():
-        print(f"Lecture météo : {capital}")
-        weather_data.append(get_weather(capital))
-
-    df = pd.DataFrame(weather_data)
-
-    print("\n=== METEO MONDIALE ===")
-    print(df)
-
-    df.to_excel("meteo_mondiale.xlsx", index=False)
-    print("\nFichier exporté : meteo_mondiale.xlsx")
+def main():
+    print("=== Surveillance Wi-Fi en temps réel (Ctrl+C pour quitter) ===\n")
+    
+    try:
+        while True:
+            wifi = get_wifi_info()
+            
+            # Efface l'écran (Windows)
+            os.system("cls" if os.name == "nt" else "clear")
+            
+            if wifi and wifi["ssid"] != "Non connecté":
+                qualite = quality_label(wifi["signal"])
+                bars = "█" * (wifi["signal"] // 10) + "░" * (10 - (wifi["signal"] // 10))
+                
+                print(f"Réseau SSID : {wifi['ssid']}")
+                print(f"Canal       : {wifi['channel']}")
+                print(f"Signal      : [{bars}] {wifi['signal']}% ({qualite})")
+                print(f"Débit TX/RX : {wifi['tx_rate']} / {wifi['rx_rate']}")
+            else:
+                print("Aucune connexion Wi-Fi active détectée.")
+                
+            time.sleep(1)
+            
+    except KeyboardInterrupt:
+        print("\nSurveillance arrêtée.")
 
 if __name__ == "__main__":
-    display_weather()
+    main()
